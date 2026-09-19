@@ -365,6 +365,7 @@
   const commandIdElement = document.getElementById('commandId');
   const updatedAtElement = document.getElementById('updatedAt');
   const serverTimeElement = document.getElementById('serverTime');
+  const startButton = document.getElementById('startButton');
 
   function getToken() {
     return (tokenElement.value || '').trim();
@@ -398,6 +399,15 @@
     commandIdElement.textContent = data.commandId || '—';
     updatedAtElement.textContent = formatTime(data.updatedAt);
     serverTimeElement.textContent = formatTime(data.serverTime);
+
+    /*
+     * START only makes sense after UNLOCK.
+     */
+    if (currentState === 'LOCKED') {
+      startButton.disabled = true;
+    } else {
+      startButton.disabled = false;
+    }
   }
 
   function sendCommand(command) {
