@@ -126,11 +126,11 @@
       transform: scale(0.96);
     }
     .btn-start:disabled {
-      background: rgba(30, 41, 59, 0.6);
-      border-color: rgba(245, 158, 11, 0.4);
+      background: rgba(30, 41, 59, 0.7);
+      border-color: rgba(245, 158, 11, 0.5);
       color: #fbbf24;
       cursor: not-allowed;
-      box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.25);
     }
     .status-hint {
       margin-top: 1.25rem;
@@ -141,207 +141,277 @@
     }
     .status-hint.ready { color: #10b981; }
     .status-hint.locked { color: #f59e0b; }
-    
-    /* Subtle Tap to Unmute helper if browser blocked autoplay sound */
-    #unmuteNotice {
-      display: none;
+
+    /* Floating Cinema HUD: ONLY the Mute/Sound button is displayed */
+    .cinema-hud {
       position: absolute;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(34, 211, 238, 0.4);
-      color: #38bdf8;
-      padding: 0.6rem 1.4rem;
-      border-radius: 9999px;
-      font-size: 0.8rem;
-      letter-spacing: 0.1em;
+      top: env(safe-area-inset-top, 1.25rem);
+      right: env(safe-area-inset-right, 1.25rem);
       z-index: 40;
-      backdrop-filter: blur(10px);
+      transition: opacity 0.5s ease;
+    }
+    .cinema-hud.hud-hidden {
+      opacity: 0;
+    }
+    .hud-sound-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #e2e8f0;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      backdrop-filter: blur(12px);
       cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      transition: all 0.2s ease;
+    }
+    .hud-sound-btn:hover {
+      background: rgba(6, 182, 212, 0.35);
+      border-color: #22d3ee;
+      color: #ffffff;
     }
   </style>
 </head>
 <body>
   <div id="startScreen">
-    <div class="badge" id="adminBadge" title="Click 5 times for Organizer Offline Override">
+    <div class="badge" id="adminBadge" title="Click 5 times for Organizer Passcode Override">
       <span class="badge-dot"></span>
       <span>ASTRA HACKATHON 2026</span>
     </div>
     
-    <h1 class="title" id="brandTitle" title="Click 5 times for Organizer Offline Override">ASTRA</h1>
+    <h1 class="title" id="brandTitle" title="Click 5 times for Organizer Passcode Override">ASTRA</h1>
     <p class="subtitle">Cinematic Offline Experience</p>
 
+    <!-- START BUTTON -->
     <button id="startBtn" class="btn-start" onclick="startCinematic()">
       START FULLSCREEN
     </button>
     <div id="statusHint" class="status-hint ready">READY • TAP TO LAUNCH</div>
   </div>
 
-  <div id="videoContainer" onclick="unmuteAllAudio()">
-    <!-- VIDEO PLAYS WITH SOUND (UNMUTED) -->
-    <video id="heroVideo" loop playsinline webkit-playsinline="true" preload="auto">
+  <div id="videoContainer">
+    <!-- VIDEO IS 100% SILENT (AUDIO TRACK STRIPPED WITH -AN) -->
+    <video id="heroVideo" loop muted playsinline webkit-playsinline="true" preload="auto">
       <source src="assets/video/astra-hero.mp4" type="video/mp4">
-      <source src="hackthon-video.mp4" type="video/mp4">
       <source src="hackthon video.mp4" type="video/mp4">
     </video>
 
-    <!-- Synchronized Audio Track from hackthon video.mp4 -->
-    <audio id="bgSong" loop preload="auto">
-      <source src="hackthon-video-audio.mp3" type="audio/mpeg">
-      <source src="assets/audio/hackthon-video-audio.mp3" type="audio/mpeg">
-    </audio>
+    <!-- EXACTLY ONE AUDIO ELEMENT: ONLY /assets/audio/astra-theme.mp3 -->
+    <audio id="bgSong" src="/assets/audio/astra-theme.mp3" preload="auto" loop style="display: none;"></audio>
 
-    <div id="unmuteNotice" onclick="unmuteAllAudio()">
-      🔊 TAP ANYWHERE TO UNMUTE SOUND
+    <!-- ONLY THIS MUTE/SOUND BUTTON IS DISPLAYED ON SCREEN -->
+    <div class="cinema-hud" id="hudControls">
+      <button class="hud-sound-btn" id="soundBtn" onclick="toggleSongMute()">
+        <span id="soundIcon">🔊</span>
+        <span id="soundText">SOUND ON</span>
+      </button>
     </div>
   </div>
 
   <script>
-    let GOOGLE_SCRIPT_URL = "";
+    // DEPLOYED GOOGLE APPS SCRIPT WEB APP URL
+    let GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxEnhPkI6dWiI-83KS_j--0SfQ_C3LiL6c6HO5Wa8cQTzuRa8J8SLrdhxoOsoq_XKgS9g/exec";
+    
     const urlParams = new URLSearchParams(window.location.search);
-    let isLocked = urlParams.get('lock') === 'true';
-    if (urlParams.get('unlock') === 'true') isLocked = false;
-    if (urlParams.get('script')) GOOGLE_SCRIPT_URL = urlParams.get('script');
+    if (urlParams.get('script')) {
+      GOOGLE_SCRIPT_URL = urlParams.get('script');
+      localStorage.setItem('astra_script_url', GOOGLE_SCRIPT_URL);
+    } else if (localStorage.getItem('astra_script_url')) {
+      GOOGLE_SCRIPT_URL = localStorage.getItem('astra_script_url');
+    }
+
+    // Persistent Lock State
+    let isLocked = localStorage.getItem('astra_is_locked') === 'true';
+    if (urlParams.get('lock') === 'true') {
+      isLocked = true;
+      localStorage.setItem('astra_is_locked', 'true');
+    } else if (urlParams.get('unlock') === 'true') {
+      isLocked = false;
+      localStorage.setItem('astra_is_locked', 'false');
+    }
 
     const video = document.getElementById('heroVideo');
-    const audio = document.getElementById('bgSong');
+    const song = document.getElementById('bgSong');
     const startScreen = document.getElementById('startScreen');
     const videoContainer = document.getElementById('videoContainer');
     const startBtn = document.getElementById('startBtn');
     const statusHint = document.getElementById('statusHint');
-    const unmuteNotice = document.getElementById('unmuteNotice');
+    const soundBtn = document.getElementById('soundBtn');
+    const soundIcon = document.getElementById('soundIcon');
+    const soundText = document.getElementById('soundText');
+    const hudControls = document.getElementById('hudControls');
+
+    // Permanently mute video element
+    video.muted = true;
 
     function updateLockUI() {
       if (isLocked) {
         startBtn.disabled = true;
         startBtn.innerHTML = "🔒 LOCKED — WAITING FOR ORGANIZER";
         statusHint.className = "status-hint locked";
-        statusHint.textContent = "PLEASE WAIT • ORGANIZER WILL UNLOCK MOMENTARILY";
+        statusHint.textContent = "WAITING FOR ORGANIZER SIGNAL • START IS BLOCKED";
       } else {
         startBtn.disabled = false;
         startBtn.innerHTML = "🚀 START FULLSCREEN";
         statusHint.className = "status-hint ready";
-        statusHint.textContent = "READY • TAP TO LAUNCH CINEMATIC EXPERIENCE";
+        statusHint.textContent = "UNLOCKED • TAP TO LAUNCH CINEMATIC EXPERIENCE";
       }
     }
     updateLockUI();
 
+    // Poll Google Apps Script every 2.5 seconds
     if (GOOGLE_SCRIPT_URL) {
-      function checkGoogleScriptStatus() {
+      function checkRemoteStatus() {
         if (!navigator.onLine) return;
-        fetch(GOOGLE_SCRIPT_URL + (GOOGLE_SCRIPT_URL.includes('?') ? '&' : '?') + 't=' + Date.now())
+        const fetchUrl = GOOGLE_SCRIPT_URL + (GOOGLE_SCRIPT_URL.includes('?') ? '&' : '?') + 'format=json&t=' + Date.now();
+        fetch(fetchUrl)
           .then(res => res.json())
           .then(data => {
             if (data && typeof data.unlocked === 'boolean') {
               isLocked = !data.unlocked;
+              localStorage.setItem('astra_is_locked', isLocked ? 'true' : 'false');
               updateLockUI();
             }
           })
           .catch(() => {});
       }
-      setInterval(checkGoogleScriptStatus, 3000);
-      checkGoogleScriptStatus();
+      setInterval(checkRemoteStatus, 2500);
+      checkRemoteStatus();
     }
 
-    // Secret Organizer Override
+    // ORGANIZER OVERRIDE (PASSCODE: 0527)
     let clickCount = 0;
     let clickTimer = null;
-    function registerAdminClick() {
+    function handleAdminTrigger() {
       clickCount++;
       if (clickTimer) clearTimeout(clickTimer);
       clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
       if (clickCount >= 5) {
         clickCount = 0;
-        const code = prompt("Organizer Override: Enter passcode to toggle lock (Default: 2026):");
-        if (code === "2026" || code === "admin") {
+        const code = prompt("Organizer Security Override\nEnter Passcode:");
+        if (code === "0527") {
           isLocked = !isLocked;
+          localStorage.setItem('astra_is_locked', isLocked ? 'true' : 'false');
           updateLockUI();
+          alert(isLocked ? "Website is now LOCKED" : "Website is now UNLOCKED!");
+        } else if (code !== null) {
+          alert("Invalid passcode.");
         }
       }
     }
-    document.getElementById('adminBadge').addEventListener('click', registerAdminClick);
-    document.getElementById('brandTitle').addEventListener('click', registerAdminClick);
+
+    document.getElementById('adminBadge').addEventListener('click', handleAdminTrigger);
+    document.getElementById('brandTitle').addEventListener('click', handleAdminTrigger);
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'u' || e.key === 'U') {
-        const code = prompt("Organizer Override: Enter passcode (Default: 2026):");
-        if (code === "2026" || code === "admin") {
+        const code = prompt("Organizer Security Override\nEnter Passcode:");
+        if (code === "0527") {
           isLocked = !isLocked;
+          localStorage.setItem('astra_is_locked', isLocked ? 'true' : 'false');
           updateLockUI();
+          alert(isLocked ? "Website is now LOCKED" : "Website is now UNLOCKED!");
+        } else if (code !== null) {
+          alert("Invalid passcode.");
         }
       }
       if (e.key === 'f' || e.key === 'F') toggleFullscreen();
-      if (e.key === 'm' || e.key === 'M') {
-        video.muted = !video.muted;
-        audio.muted = !audio.muted;
-      }
+      if (e.key === 'm' || e.key === 'M') toggleSongMute();
       if (e.key === 'r' || e.key === 'R') {
         video.currentTime = 0;
-        audio.currentTime = 0;
+        song.currentTime = 0;
         video.play().catch(() => {});
-        audio.play().catch(() => {});
+        song.play().catch(() => {});
       }
     });
 
-    function unmuteAllAudio() {
-      video.muted = false;
-      video.volume = 1.0;
-      audio.muted = false;
-      audio.volume = 1.0;
-      video.play().catch(() => {});
-      audio.play().catch(() => {});
-      unmuteNotice.style.display = 'none';
+    function toggleSongMute() {
+      song.muted = !song.muted;
+      if (song.muted) {
+        soundIcon.textContent = "🔇";
+        soundText.textContent = "MUTED";
+      } else {
+        soundIcon.textContent = "🔊";
+        soundText.textContent = "SOUND ON";
+        song.play().catch(() => {});
+      }
     }
 
+    // Auto-hide the sound button after 3.5 seconds of inactivity
+    let hudTimeout = null;
+    function showHudTemporarily() {
+      hudControls.classList.remove('hud-hidden');
+      if (hudTimeout) clearTimeout(hudTimeout);
+      hudTimeout = setTimeout(() => {
+        hudControls.classList.add('hud-hidden');
+      }, 3500);
+    }
+    window.addEventListener('mousemove', showHudTemporarily);
+    window.addEventListener('touchstart', showHudTemporarily);
+
     // =========================================================================
-    // START EXPERIENCE: PLAYS HACKTHON VIDEO WITH FULL SOUND
+    // START EXPERIENCE: VIDEO IS SILENT, ASTRA-THEME.MP3 PLAYS WITH SOUND
     // =========================================================================
-    function startCinematic() {
+    async function startCinematic() {
       if (isLocked) {
-        alert("Event has not started yet. Please wait for the organizer!");
+        alert("The event has not started yet. Please wait for the organizer to unlock!");
         return;
       }
 
-      triggerFullscreen();
+      // Prepare ASTRA theme
+      song.pause();
+      song.currentTime = 0;
+      song.loop = true;
+      song.muted = false;
+      song.volume = 1;
 
-      // 1. Force unmuted audio at 100% volume
-      video.muted = false;
-      video.volume = 1.0;
+      // Prepare ASTRA video
+      video.pause();
       video.currentTime = 0;
+      video.loop = true;
+      video.muted = true;
 
-      // 2. Play video
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise.then(() => {
-          console.log('[Audio] Video playing with sound successfully!');
-        }).catch((err) => {
-          console.warn('[Audio] Autoplay with sound restricted by browser, engaging fallback:', err);
-          // Fallback: try separate audio stream
-          audio.muted = false;
-          audio.volume = 1.0;
-          audio.currentTime = 0;
-          audio.play().catch(() => {});
-          
-          video.muted = true;
-          video.play().catch(() => {});
-          unmuteNotice.style.display = 'block';
-        });
+      // Start ASTRA theme
+      try {
+        await song.play();
+      } catch (error) {
+        console.warn("ASTRA theme playback failed:", error);
+      }
+
+      // Start ASTRA video
+      try {
+        await video.play();
+      } catch (error) {
+        console.warn("ASTRA video playback failed:", error);
+      }
+
+      // Request fullscreen
+      try {
+        triggerFullscreen();
+      } catch (error) {
+        console.warn("Fullscreen request failed:", error);
       }
 
       startScreen.classList.add('hidden');
       videoContainer.classList.add('active');
+      showHudTemporarily();
     }
 
-    // Continuous Loop with Sound
+    // Continuous Loop
     video.addEventListener('ended', () => {
       video.currentTime = 0;
       video.play().catch(() => {});
     });
 
-    audio.addEventListener('ended', () => {
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
+    song.addEventListener('ended', () => {
+      song.currentTime = 0;
+      song.play().catch(() => {});
     });
 
     function triggerFullscreen() {

@@ -1,7 +1,7 @@
 // ASTRA Offline-First Service Worker
 // Version: astra-cache-v1.0.0
 
-const CACHE_NAME = 'astra-cinematic-v1';
+const CACHE_NAME = 'astra-cinematic-v2';
 
 const STATIC_ASSETS = [
   '/',
@@ -11,7 +11,8 @@ const STATIC_ASSETS = [
   '/assets/icons/icon-512.png',
   '/favicon.ico',
   '/assets/video/astra-hero.mp4',
-  '/assets/video/hackthon video.mp4'
+  '/assets/video/hackthon video.mp4',
+  '/assets/audio/astra-theme.mp3'
 ];
 
 // 1. INSTALLATION: Pre-cache core shell and video asset
@@ -135,7 +136,7 @@ async function handleRangeRequest(request) {
       'Content-Range': `bytes ${start}-${end}/${totalLength}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': slicedBuffer.byteLength,
-      'Content-Type': response.headers.get('Content-Type') || 'video/mp4'
+      'Content-Type': response.headers.get('Content-Type') || (request.url.endsWith('.mp3') ? 'audio/mpeg' : 'video/mp4')
     }
   });
 }

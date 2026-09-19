@@ -1,47 +1,66 @@
 import React, { useEffect, useRef, useState } from 'react';
 import '../styles/start-screen.css';
 
+// Default Deployed Google Apps Script Web App URL
+const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxEnhPkI6dWiI-83KS_j--0SfQ_C3LiL6c6HO5Wa8cQTzuRa8J8SLrdhxoOsoq_XKgS9g/exec";
+
 export default function StartScreen({ onStart, isFadingOut }) {
   const canvasRef = useRef(null);
   
-  // Google Apps Script Lock State
+  // Persistent Lock State from localStorage so screen refresh stays locked!
   const [isLocked, setIsLocked] = useState(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
-      if (p.get('lock') === 'true') return true;
-      if (p.get('unlock') === 'true') return false;
+      if (p.get('lock') === 'true') {
+        localStorage.setItem('astra_is_locked', 'true');
+        return true;
+      }
+      if (p.get('unlock') === 'true') {
+        localStorage.setItem('astra_is_locked', 'false');
+        return false;
+      }
+      return localStorage.getItem('astra_is_locked') === 'true';
     }
-    return false; // Default unlocked unless ?lock=true or Google Script specifies
+    return false;
   });
 
   const [googleScriptUrl, setGoogleScriptUrl] = useState(() => {
     if (typeof window !== 'undefined') {
-      return new URLSearchParams(window.location.search).get('script') || '';
+      const p = new URLSearchParams(window.location.search);
+      const s = p.get('script');
+      if (s) {
+        localStorage.setItem('astra_script_url', s);
+        return s;
+      }
+      return localStorage.getItem('astra_script_url') || DEFAULT_SCRIPT_URL;
     }
-    return '';
+    return DEFAULT_SCRIPT_URL;
   });
 
   const clickCountRef = useRef(0);
   const clickTimerRef = useRef(null);
 
-  // Poll Google Apps Script if URL is provided
+  // Poll Google Apps Script in real-time every 2.5 seconds
   useEffect(() => {
     if (!googleScriptUrl) return;
 
     const checkScript = () => {
       if (!navigator.onLine) return;
-      fetch(`${googleScriptUrl}${googleScriptUrl.includes('?') ? '&' : '?'}t=${Date.now()}`)
+      const fetchUrl = `${googleScriptUrl}${googleScriptUrl.includes('?') ? '&' : '?'}format=json&t=${Date.now()}`;
+      fetch(fetchUrl)
         .then((res) => res.json())
         .then((data) => {
           if (data && typeof data.unlocked === 'boolean') {
-            setIsLocked(!data.unlocked);
+            const lockedState = !data.unlocked;
+            setIsLocked(lockedState);
+            localStorage.setItem('astra_is_locked', lockedState ? 'true' : 'false');
           }
         })
         .catch(() => {});
     };
 
     checkScript();
-    const interval = setInterval(checkScript, 3000);
+    const interval = setInterval(checkScript, 2500);
     return () => clearInterval(interval);
   }, [googleScriptUrl]);
 
@@ -104,7 +123,7 @@ export default function StartScreen({ onStart, isFadingOut }) {
     };
   }, []);
 
-  // Offline Organizer Secret Override: Press 'U' or tap ASTRA 5 times
+  // Offline Organizer Secret Override: Passcode is "0527"
   const handleSecretTap = () => {
     clickCountRef.current += 1;
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
@@ -114,9 +133,16 @@ export default function StartScreen({ onStart, isFadingOut }) {
 
     if (clickCountRef.current >= 5) {
       clickCountRef.current = 0;
-      const code = prompt('Organizer Override: Enter passcode to toggle lock (Default: 2026):');
-      if (code === '2026' || code === 'admin') {
-        setIsLocked((prev) => !prev);
+      const code = prompt('Organizer Security Override\nEnter Passcode:');
+      if (code === '0527') {
+        setIsLocked((prev) => {
+          const next = !prev;
+          localStorage.setItem('astra_is_locked', next ? 'true' : 'false');
+          alert(next ? 'Website is now LOCKED' : 'Website is now UNLOCKED!');
+          return next;
+        });
+      } else if (code !== null) {
+        alert('Invalid passcode.');
       }
     }
   };
@@ -124,9 +150,16 @@ export default function StartScreen({ onStart, isFadingOut }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'u' || e.key === 'U') {
-        const code = prompt('Organizer Override: Enter passcode to toggle lock (Default: 2026):');
-        if (code === '2026' || code === 'admin') {
-          setIsLocked((prev) => !prev);
+        const code = prompt('Organizer Security Override\nEnter Passcode:');
+        if (code === '0527') {
+          setIsLocked((prev) => {
+            const next = !prev;
+            localStorage.setItem('astra_is_locked', next ? 'true' : 'false');
+            alert(next ? 'Website is now LOCKED' : 'Website is now UNLOCKED!');
+            return next;
+          });
+        } else if (code !== null) {
+          alert('Invalid passcode.');
         }
       }
     };
@@ -136,7 +169,7 @@ export default function StartScreen({ onStart, isFadingOut }) {
 
   const handleStart = () => {
     if (isLocked) {
-      alert('Event has not started yet. Please wait for the organizer!');
+      alert('The event has not started yet. Please wait for the organizer to unlock!');
       return;
     }
     onStart();
@@ -163,7 +196,7 @@ export default function StartScreen({ onStart, isFadingOut }) {
           className="brand-badge"
           onClick={handleSecretTap}
           style={{ cursor: 'pointer' }}
-          title="Tap 5 times for Organizer Offline Override"
+          title="Tap 5 times for Organizer Passcode Override"
         >
           <span className="brand-badge-dot" />
           <span>ASTRA HACKATHON 2026</span>
@@ -173,7 +206,7 @@ export default function StartScreen({ onStart, isFadingOut }) {
           className="astra-title"
           onClick={handleSecretTap}
           style={{ cursor: 'pointer' }}
-          title="Tap 5 times for Organizer Offline Override"
+          title="Tap 5 times for Organizer Passcode Override"
         >
           ASTRA
         </h1>

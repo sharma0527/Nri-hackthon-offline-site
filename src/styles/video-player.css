@@ -102,6 +102,7 @@
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
   transition: all 0.2s ease;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .hud-action-btn:hover {
