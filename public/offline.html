@@ -265,23 +265,84 @@
     }
     updateLockUI();
 
-    // Poll Google Apps Script every 2.5 seconds
+    // Remote Organizer Listener (800ms Near-Real-Time Polling via JSONP/Fetch)
+    let lastCommandId = '0';
+    function fetchStateJSONP(url, cb) {
+      const cbName = 'offline_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+      const script = document.createElement('script');
+      let timer = null;
+
+      window[cbName] = function(data) {
+        if (timer) clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        cb(null, data);
+      };
+
+      script.src = url + (url.includes('?') ? '&' : '?') + 'api=state&callback=' + cbName + '&_t=' + Date.now();
+      script.onerror = function() {
+        if (timer) clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        fetch(url + (url.includes('?') ? '&' : '?') + 'api=state&_t=' + Date.now())
+          .then(res => res.json())
+          .then(data => cb(null, data))
+          .catch(err => cb(err, null));
+      };
+
+      timer = setTimeout(() => {
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }, 3500);
+
+      document.head.appendChild(script);
+    }
+
     if (GOOGLE_SCRIPT_URL) {
       function checkRemoteStatus() {
         if (!navigator.onLine) return;
-        const fetchUrl = GOOGLE_SCRIPT_URL + (GOOGLE_SCRIPT_URL.includes('?') ? '&' : '?') + 'format=json&t=' + Date.now();
-        fetch(fetchUrl)
-          .then(res => res.json())
-          .then(data => {
-            if (data && typeof data.unlocked === 'boolean') {
-              isLocked = !data.unlocked;
-              localStorage.setItem('astra_is_locked', isLocked ? 'true' : 'false');
-              updateLockUI();
+        fetchStateJSONP(GOOGLE_SCRIPT_URL, (err, data) => {
+          if (err || !data || !data.success) return;
+
+          // Update lock state
+          if (data.state === 'LOCKED') {
+            isLocked = true;
+            localStorage.setItem('astra_is_locked', 'true');
+            updateLockUI();
+          } else if (data.state === 'UNLOCKED') {
+            isLocked = false;
+            localStorage.setItem('astra_is_locked', 'false');
+            updateLockUI();
+          }
+
+          // Trigger remote actions on new commands
+          if (data.commandId && data.commandId !== lastCommandId) {
+            lastCommandId = data.commandId;
+
+            if (data.state === 'PLAYING') {
+              isLocked = false;
+              startCinematic();
+            } else if (data.state === 'STOPPED') {
+              video.pause();
+              song.pause();
+              video.currentTime = 0;
+              song.currentTime = 0;
+              cinematicActive = false;
+              startScreen.classList.remove('hidden');
+              videoContainer.classList.remove('active');
+            } else if (data.command === 'ASTRA_SYNC' && data.startTime) {
+              const elapsed = Math.max(0, (Date.now() - data.startTime) / 1000);
+              if (video.duration && isFinite(video.duration)) {
+                video.currentTime = elapsed % video.duration;
+              }
+              if (song.duration && isFinite(song.duration)) {
+                song.currentTime = elapsed % song.duration;
+              }
             }
-          })
-          .catch(() => {});
+          }
+        });
       }
-      setInterval(checkRemoteStatus, 2500);
+      setInterval(checkRemoteStatus, 800);
       checkRemoteStatus();
     }
 

@@ -7,24 +7,48 @@
  * FILE:
  *   Code.gs
  *
- * SECOND FILE:
+ * HTML FILE:
  *   app.html
  *
+ * PURPOSE:
+ *   Central organizer controller for the ASTRA
+ *   cinematic experience.
+ *
  * FEATURES:
- *   • Private organizer panel
+ *
+ *   ORGANIZER
+ *   ----------
  *   • START FULLSCREEN
+ *   • STOP ALL
  *   • LOCK ALL
  *   • UNLOCK ALL
- *   • STOP ALL
  *   • SYNC ALL
- *   • Central session state
+ *   • RESET SYSTEM
+ *
+ *   SESSION
+ *   -------
+ *   • Central state
  *   • Command ID
  *   • Version number
  *   • Server timestamp
- *   • Organizer authorization
- *   • Participant polling with JSON and JSONP support
+ *   • Start timestamp
+ *   • Session ID
+ *
+ *   PARTICIPANTS
+ *   ------------
+ *   • Public state read endpoint
+ *   • JSON response
+ *   • JSONP response
+ *   • No organizer token required
+ *
+ *   SECURITY
+ *   --------
+ *   • Organizer commands require ADMIN_TOKEN
+ *   • Participant clients can ONLY read state
+ *   • No public command URL
  *
  * STATES:
+ *
  *   LOCKED
  *   UNLOCKED
  *   PLAYING
@@ -37,23 +61,30 @@
    ===================================================== */
 const CONFIG = {
   /*
-   Private organizer key for authorizing admin actions.
-  */
+   * IMPORTANT:
+   * Keep this private.
+   * Do NOT put this token inside your participant React/Vite website.
+   */
   ADMIN_TOKEN: 'ASTRA-2026-ORGANIZER-PRIVATE-KEY-938472',
 
   /*
-   Event/session identifier.
-  */
+   * Event session identifier.
+   */
   SESSION_ID: 'ASTRA-2026',
 
   /*
-   Participant polling interval.
-   800 ms = near-real-time.
-  */
+   * Participant polling interval.
+   * 800 ms means approximately 1 request every 0.8 seconds per participant.
+   */
   POLL_MS: 800,
 
-  VIDEO: '/assets/video/astra-hero.mp4',
-  AUDIO: '/assets/audio/astra-theme.mp3'
+  /*
+   * Asset information sent to participants.
+   * These are LOCAL website paths.
+   * Apps Script does NOT host the media.
+   */
+  VIDEO_ASSET: '/assets/video/astra-hero.mp4',
+  AUDIO_ASSET: '/assets/audio/astra-theme.mp3'
 };
 
 /* =====================================================
@@ -62,10 +93,9 @@ const CONFIG = {
 function doGet(e) {
   const params = e && e.parameter ? e.parameter : {};
 
-  /*
-   * Organizer panel:
-   * /exec?page=admin
-   */
+  /* ---------------------------------------------------
+     ORGANIZER DASHBOARD
+     --------------------------------------------------- */
   if (params.page === 'admin') {
     return HtmlService
       .createHtmlOutputFromFile('app')
@@ -73,82 +103,48 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
-  /*
-   * API:
-   * /exec?api=state (Supports JSON and JSONP with ?callback=...)
-   */
+  /* ---------------------------------------------------
+     PUBLIC PARTICIPANT STATE
+     ---------------------------------------------------
+     Normal:
+       ?api=state
+     JSONP:
+       ?api=state&callback=astraCallback
+  */
   if (params.api === 'state' || params.format === 'json') {
     const state = getState_();
+
+    /*
+     * JSONP support.
+     * Useful when the participant Vite website
+     * is hosted on another origin and normal fetch()
+     * encounters cross-origin restrictions.
+     */
     if (params.callback) {
-      const callback = String(params.callback).replace(/[^a-zA-Z0-9_$\.]/g, '');
-      return ContentService
-        .createTextOutput(callback + '(' + JSON.stringify(state) + ');')
-        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+      return jsonpResponse_(params.callback, state);
     }
+
+    /*
+     * Normal JSON response.
+     */
     return jsonResponse_(state);
   }
 
-  /*
-   * API:
-   * /exec?api=start&token=...
-   */
-  if (params.api === 'start') {
-    return jsonResponse_(startCommand_(params.token));
-  }
-
-  /*
-   * API:
-   * /exec?api=stop&token=...
-   */
-  if (params.api === 'stop') {
-    return jsonResponse_(stopCommand_(params.token));
-  }
-
-  /*
-   * API:
-   * /exec?api=lock&token=...
-   */
-  if (params.api === 'lock') {
-    return jsonResponse_(lockCommand_(params.token));
-  }
-
-  /*
-   * API:
-   * /exec?api=unlock&token=...
-   */
-  if (params.api === 'unlock') {
-    return jsonResponse_(unlockCommand_(params.token));
-  }
-
-  /*
-   * API:
-   * /exec?api=sync&token=...
-   */
-  if (params.api === 'sync') {
-    return jsonResponse_(syncCommand_(params.token));
-  }
-
-  /*
-   * Default response: Serve app or current state JSON
-   */
-  if (params.page === 'app') {
-    return HtmlService
-      .createHtmlOutputFromFile('app')
-      .setTitle('ASTRA Hackathon 2026')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  }
-
+  /* ---------------------------------------------------
+     DEFAULT
+     --------------------------------------------------- */
   return jsonResponse_({
     success: true,
-    service: 'ASTRA Controller',
+    service: 'ASTRA Organizer Controller',
     sessionId: CONFIG.SESSION_ID,
     state: getState_().state,
-    version: getState_().version
+    version: getState_().version,
+    serverTime: Date.now()
   });
 }
 
 /* =====================================================
-   GET CURRENT SESSION STATE
+   GET CURRENT STATE
    ===================================================== */
 function getState_() {
   const props = PropertiesService.getScriptProperties();
@@ -158,6 +154,7 @@ function getState_() {
   const startTime = Number(props.getProperty('ASTRA_START_TIME') || '0');
   const version = Number(props.getProperty('ASTRA_VERSION') || '0');
   const updatedAt = Number(props.getProperty('ASTRA_UPDATED_AT') || '0');
+  const serverTime = Date.now();
 
   return {
     success: true,
@@ -168,21 +165,21 @@ function getState_() {
     startTime: startTime,
     version: version,
     updatedAt: updatedAt,
-    serverTime: Date.now(),
+    serverTime: serverTime,
     pollMs: CONFIG.POLL_MS,
-    video: CONFIG.VIDEO,
-    audio: CONFIG.AUDIO
+    videoAsset: CONFIG.VIDEO_ASSET,
+    audioAsset: CONFIG.AUDIO_ASSET
   };
 }
 
 /* =====================================================
-   ORGANIZER START
+   START COMMAND
    ===================================================== */
 function startCommand_(token) {
   verifyToken_(token);
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  lock.waitLock(10000);
 
   try {
     const props = PropertiesService.getScriptProperties();
@@ -191,6 +188,11 @@ function startCommand_(token) {
     const currentVersion = Number(props.getProperty('ASTRA_VERSION') || '0');
     const newVersion = currentVersion + 1;
 
+    /*
+     * START TIMESTAMP
+     * Every participant uses this same timestamp
+     * to calculate where playback should be.
+     */
     props.setProperties({
       ASTRA_STATE: 'PLAYING',
       ASTRA_COMMAND_ID: commandId,
@@ -208,8 +210,8 @@ function startCommand_(token) {
       startTime: now,
       version: newVersion,
       serverTime: Date.now(),
-      video: CONFIG.VIDEO,
-      audio: CONFIG.AUDIO
+      videoAsset: CONFIG.VIDEO_ASSET,
+      audioAsset: CONFIG.AUDIO_ASSET
     };
   } finally {
     lock.releaseLock();
@@ -217,13 +219,13 @@ function startCommand_(token) {
 }
 
 /* =====================================================
-   ORGANIZER STOP
+   STOP COMMAND
    ===================================================== */
 function stopCommand_(token) {
   verifyToken_(token);
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  lock.waitLock(10000);
 
   try {
     const props = PropertiesService.getScriptProperties();
@@ -256,13 +258,13 @@ function stopCommand_(token) {
 }
 
 /* =====================================================
-   ORGANIZER LOCK
+   LOCK COMMAND
    ===================================================== */
 function lockCommand_(token) {
   verifyToken_(token);
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  lock.waitLock(10000);
 
   try {
     const props = PropertiesService.getScriptProperties();
@@ -293,13 +295,13 @@ function lockCommand_(token) {
 }
 
 /* =====================================================
-   ORGANIZER UNLOCK
+   UNLOCK COMMAND
    ===================================================== */
 function unlockCommand_(token) {
   verifyToken_(token);
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  lock.waitLock(10000);
 
   try {
     const props = PropertiesService.getScriptProperties();
@@ -330,44 +332,54 @@ function unlockCommand_(token) {
 }
 
 /* =====================================================
-   ORGANIZER SYNC
+   SYNC COMMAND
    ===================================================== */
 function syncCommand_(token) {
   verifyToken_(token);
 
-  const props = PropertiesService.getScriptProperties();
-  const state = props.getProperty('ASTRA_STATE') || 'LOCKED';
-  const startTime = Number(props.getProperty('ASTRA_START_TIME') || '0');
-  const now = Date.now();
-  const commandId = createCommandId_();
-  const currentVersion = Number(props.getProperty('ASTRA_VERSION') || '0');
-  const newVersion = currentVersion + 1;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
 
-  props.setProperties({
-    ASTRA_COMMAND_ID: commandId,
-    ASTRA_VERSION: String(newVersion),
-    ASTRA_UPDATED_AT: String(now)
-  });
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const state = props.getProperty('ASTRA_STATE') || 'LOCKED';
+    const startTime = Number(props.getProperty('ASTRA_START_TIME') || '0');
+    const now = Date.now();
+    const commandId = createCommandId_();
+    const currentVersion = Number(props.getProperty('ASTRA_VERSION') || '0');
+    const newVersion = currentVersion + 1;
 
-  return {
-    success: true,
-    command: 'ASTRA_SYNC',
-    state: state,
-    unlocked: (state !== 'LOCKED'),
-    startTime: startTime,
-    commandId: commandId,
-    version: newVersion,
-    serverTime: now
-  };
+    props.setProperties({
+      ASTRA_COMMAND_ID: commandId,
+      ASTRA_VERSION: String(newVersion),
+      ASTRA_UPDATED_AT: String(now)
+    });
+
+    return {
+      success: true,
+      command: 'ASTRA_SYNC',
+      state: state,
+      startTime: startTime,
+      commandId: commandId,
+      version: newVersion,
+      serverTime: now,
+      videoAsset: CONFIG.VIDEO_ASSET,
+      audioAsset: CONFIG.AUDIO_ASSET
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /* =====================================================
-   ADMIN COMMAND ROUTER (For google.script.run)
+   ADMIN COMMAND ROUTER
    ===================================================== */
 function runAdminCommand(command, token) {
   verifyToken_(token);
 
-  switch (String(command).toLowerCase()) {
+  const normalizedCommand = String(command || '').trim().toLowerCase();
+
+  switch (normalizedCommand) {
     case 'start':
       return startCommand_(token);
     case 'stop':
@@ -383,14 +395,61 @@ function runAdminCommand(command, token) {
   }
 }
 
+/* =====================================================
+   ADMIN STATE
+   ===================================================== */
 function getAdminState() {
   return getState_();
 }
 
+/* =====================================================
+   ADMIN RESET
+   ===================================================== */
 function adminReset(token) {
   verifyToken_(token);
   emergencyReset_();
   return getState_();
+}
+
+/* =====================================================
+   INITIALIZE ASTRA
+   ===================================================== */
+function initializeASTRA() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+
+  try {
+    PropertiesService
+      .getScriptProperties()
+      .setProperties({
+        ASTRA_STATE: 'LOCKED',
+        ASTRA_COMMAND_ID: '0',
+        ASTRA_START_TIME: '0',
+        ASTRA_VERSION: '0',
+        ASTRA_UPDATED_AT: String(Date.now())
+      });
+
+    console.log('ASTRA initialized successfully.');
+    return getState_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* =====================================================
+   EMERGENCY RESET
+   ===================================================== */
+function emergencyReset_() {
+  const props = PropertiesService.getScriptProperties();
+  const now = Date.now();
+
+  props.setProperties({
+    ASTRA_STATE: 'LOCKED',
+    ASTRA_COMMAND_ID: createCommandId_(),
+    ASTRA_START_TIME: '0',
+    ASTRA_VERSION: '0',
+    ASTRA_UPDATED_AT: String(now)
+  });
 }
 
 /* =====================================================
@@ -402,14 +461,20 @@ function verifyToken_(token) {
   }
 
   if (String(token).trim() !== String(CONFIG.ADMIN_TOKEN).trim()) {
-    throw new Error('Unauthorized organizer request. Invalid key.');
+    throw new Error('Unauthorized organizer request.');
   }
 }
 
+/* =====================================================
+   COMMAND ID
+   ===================================================== */
 function createCommandId_() {
-  return Date.now() + '-' + Utilities.getUuid().substring(0, 8);
+  return Date.now() + '-' + Utilities.getUuid();
 }
 
+/* =====================================================
+   JSON RESPONSE
+   ===================================================== */
 function jsonResponse_(data) {
   return ContentService
     .createTextOutput(JSON.stringify(data))
@@ -417,28 +482,30 @@ function jsonResponse_(data) {
 }
 
 /* =====================================================
-   INITIALIZE ASTRA (RUN ONCE MANUALLY)
+   JSONP RESPONSE
    ===================================================== */
-function initializeASTRA() {
-  PropertiesService
-    .getScriptProperties()
-    .setProperties({
-      ASTRA_STATE: 'LOCKED',
-      ASTRA_COMMAND_ID: '0',
-      ASTRA_START_TIME: '0',
-      ASTRA_VERSION: '0',
-      ASTRA_UPDATED_AT: String(Date.now())
+function jsonpResponse_(callback, data) {
+  const safeCallback = String(callback).replace(/[^a-zA-Z0-9_$\.]/g, '');
+
+  if (!safeCallback) {
+    return jsonResponse_({
+      success: false,
+      error: 'Invalid callback.'
     });
+  }
+
+  const payload = safeCallback + '(' + JSON.stringify(data) + ');';
+
+  return ContentService
+    .createTextOutput(payload)
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
-function emergencyReset_() {
-  PropertiesService
-    .getScriptProperties()
-    .setProperties({
-      ASTRA_STATE: 'LOCKED',
-      ASTRA_COMMAND_ID: createCommandId_(),
-      ASTRA_START_TIME: '0',
-      ASTRA_VERSION: '0',
-      ASTRA_UPDATED_AT: String(Date.now())
-    });
+/* =====================================================
+   OPTIONAL TEST FUNCTION
+   ===================================================== */
+function testState() {
+  const state = getState_();
+  console.log(JSON.stringify(state, null, 2));
+  return state;
 }
