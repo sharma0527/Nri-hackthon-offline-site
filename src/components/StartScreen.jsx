@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import '../styles/start-screen.css';
 
 // Default Deployed Google Apps Script Web App URL
-const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxEnhPkI6dWiI-83KS_j--0SfQ_C3LiL6c6HO5Wa8cQTzuRa8J8SLrdhxoOsoq_XKgS9g/exec";
+const DEFAULT_SCRIPT_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ASTRA_APPS_SCRIPT_URL) ||
+  "https://script.google.com/macros/s/AKfycbxEnhPkI6dWiI-83KS_j--0SfQ_C3LiL6c6HO5Wa8cQTzuRa8J8SLrdhxoOsoq_XKgS9g/exec";
 
 export default function StartScreen({ onStart, isFadingOut, isLockedExternal }) {
   const canvasRef = useRef(null);

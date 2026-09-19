@@ -1,7 +1,9 @@
 # Dependencies
 node_modules/
 
-# Environment & Temp
+# Environment & Secrets (Hidden)
+.env
 .env.local
+.env.*.local
 .DS_Store
 *.log

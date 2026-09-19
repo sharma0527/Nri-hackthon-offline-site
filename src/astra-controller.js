@@ -7,7 +7,9 @@
  * Master Controller in near-real-time (800ms polling).
  */
 
-export const ASTRA_CONTROLLER_URL = 'https://script.google.com/macros/s/AKfycbxEnhPkI6dWiI-83KS_j--0SfQ_C3LiL6c6HO5Wa8cQTzuRa8J8SLrdhxoOsoq_XKgS9g/exec';
+export const ASTRA_CONTROLLER_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ASTRA_APPS_SCRIPT_URL) ||
+  'https://script.google.com/macros/s/AKfycbxEnhPkI6dWiI-83KS_j--0SfQ_C3LiL6c6HO5Wa8cQTzuRa8J8SLrdhxoOsoq_XKgS9g/exec';
 
 let lastCommandId = '0';
 let pollIntervalId = null;
