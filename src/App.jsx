@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import StartScreen from './components/StartScreen';
+import { initAstraRemoteController } from './astra-controller';
 import './styles/video-player.css';
 
 export default function App() {
@@ -9,45 +10,55 @@ export default function App() {
 
   const [started, setStarted] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [isButtonVisible, setIsButtonVisible] = useState(true);
   const fadeTimeoutRef = useRef(null);
 
-  // START FULLSCREEN CLICK LOGIC
-  const handleStartFullscreen = async () => {
+  // START FULLSCREEN CLICK / REMOTE TRIGGER LOGIC
+  const handleStartFullscreen = useCallback(async () => {
     const audio = audioRef.current;
     const video = videoRef.current;
     const container = containerRef.current;
 
     if (!audio || !video) return;
 
-    // Prepare ASTRA theme
+    // 1. Prepare ASTRA theme
     audio.pause();
     audio.currentTime = 0;
     audio.loop = true;
     audio.muted = false;
     audio.volume = 1;
 
-    // Prepare ASTRA video
+    // 2. Prepare ASTRA video (permanently silent)
     video.pause();
     video.currentTime = 0;
     video.loop = true;
     video.muted = true;
 
-    // Start ASTRA theme
+    // 3. Start ASTRA theme with sound
     try {
       await audio.play();
     } catch (error) {
-      console.warn("ASTRA theme playback failed:", error);
+      console.warn("ASTRA theme playback failed (waiting for user gesture):", error);
+      const unlockAudio = () => {
+        audio.muted = false;
+        audio.volume = 1;
+        audio.play().catch(() => {});
+        window.removeEventListener('click', unlockAudio);
+        window.removeEventListener('touchstart', unlockAudio);
+      };
+      window.addEventListener('click', unlockAudio);
+      window.addEventListener('touchstart', unlockAudio);
     }
 
-    // Start ASTRA video
+    // 4. Start ASTRA video
     try {
       await video.play();
     } catch (error) {
       console.warn("ASTRA video playback failed:", error);
     }
 
-    // Request fullscreen
+    // 5. Request fullscreen
     try {
       if (
         container &&
@@ -61,9 +72,78 @@ export default function App() {
     }
 
     setStarted(true);
-  };
+  }, []);
 
-  // SOUND TOGGLE LOGIC
+  // STOP LOGIC (Triggered when organizer clicks STOP ALL)
+  const handleStopAll = useCallback(() => {
+    const audio = audioRef.current;
+    const video = videoRef.current;
+
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+    setStarted(false);
+  }, []);
+
+  // SYNC LOGIC (Triggered when organizer clicks SYNC ALL)
+  const handleSyncAll = useCallback((data) => {
+    const audio = audioRef.current;
+    const video = videoRef.current;
+    if (!audio || !video || !data.startTime) return;
+
+    const elapsed = Math.max(0, (Date.now() - data.startTime) / 1000);
+    if (video.duration && isFinite(video.duration)) {
+      video.currentTime = elapsed % video.duration;
+    } else {
+      video.currentTime = elapsed;
+    }
+    if (audio.duration && isFinite(audio.duration)) {
+      audio.currentTime = elapsed % audio.duration;
+    } else {
+      audio.currentTime = elapsed;
+    }
+  }, []);
+
+  // CONNECT WITH GOOGLE APPS SCRIPT MASTER CONTROLLER
+  useEffect(() => {
+    const cleanup = initAstraRemoteController({
+      onRemoteStart: () => {
+        console.log('[ASTRA Remote] Organizer triggered START FULLSCREEN');
+        handleStartFullscreen();
+      },
+      onRemoteStop: () => {
+        console.log('[ASTRA Remote] Organizer triggered STOP ALL');
+        handleStopAll();
+      },
+      onRemoteLock: () => {
+        console.log('[ASTRA Remote] Organizer triggered LOCK ALL');
+        setIsLocked(true);
+      },
+      onRemoteUnlock: () => {
+        console.log('[ASTRA Remote] Organizer triggered UNLOCK ALL');
+        setIsLocked(false);
+      },
+      onRemoteSync: (data) => {
+        console.log('[ASTRA Remote] Organizer triggered SYNC ALL');
+        handleSyncAll(data);
+      },
+      onStateChange: (stateData) => {
+        if (stateData && stateData.state) {
+          if (stateData.state === 'LOCKED') setIsLocked(true);
+          else if (stateData.state === 'UNLOCKED') setIsLocked(false);
+        }
+      }
+    });
+
+    return cleanup;
+  }, [handleStartFullscreen, handleStopAll, handleSyncAll]);
+
+  // SOUND BUTTON TOGGLE LOGIC
   const handleToggleSound = () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -200,7 +280,10 @@ export default function App() {
 
       {/* START FULLSCREEN SCREEN */}
       {!started && (
-        <StartScreen onStart={handleStartFullscreen} />
+        <StartScreen
+          onStart={handleStartFullscreen}
+          isLockedExternal={isLocked}
+        />
       )}
     </main>
   );

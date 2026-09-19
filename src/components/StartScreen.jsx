@@ -4,10 +4,10 @@ import '../styles/start-screen.css';
 // Default Deployed Google Apps Script Web App URL
 const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxEnhPkI6dWiI-83KS_j--0SfQ_C3LiL6c6HO5Wa8cQTzuRa8J8SLrdhxoOsoq_XKgS9g/exec";
 
-export default function StartScreen({ onStart, isFadingOut }) {
+export default function StartScreen({ onStart, isFadingOut, isLockedExternal }) {
   const canvasRef = useRef(null);
   
-  // Persistent Lock State from localStorage so screen refresh stays locked!
+  // Persistent Lock State from localStorage
   const [isLocked, setIsLocked] = useState(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
@@ -23,6 +23,8 @@ export default function StartScreen({ onStart, isFadingOut }) {
     }
     return false;
   });
+
+  const effectiveLocked = Boolean(isLocked || isLockedExternal);
 
   const [googleScriptUrl, setGoogleScriptUrl] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -168,7 +170,7 @@ export default function StartScreen({ onStart, isFadingOut }) {
   }, []);
 
   const handleStart = () => {
-    if (isLocked) {
+    if (effectiveLocked) {
       alert('The event has not started yet. Please wait for the organizer to unlock!');
       return;
     }
@@ -218,12 +220,12 @@ export default function StartScreen({ onStart, isFadingOut }) {
             className="btn-start"
             onClick={handleStart}
             onKeyDown={handleKeyDown}
-            disabled={isLocked}
+            disabled={effectiveLocked}
             autoFocus
             aria-label="Start ASTRA cinematic fullscreen experience"
-            style={isLocked ? { cursor: 'not-allowed', opacity: 0.8, borderColor: '#f59e0b', color: '#fbbf24' } : {}}
+            style={effectiveLocked ? { cursor: 'not-allowed', opacity: 0.8, borderColor: '#f59e0b', color: '#fbbf24' } : {}}
           >
-            {isLocked ? (
+            {effectiveLocked ? (
               <span>🔒 LOCKED — WAITING FOR ORGANIZER</span>
             ) : (
               <>
@@ -235,8 +237,8 @@ export default function StartScreen({ onStart, isFadingOut }) {
             )}
           </button>
 
-          <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', letterSpacing: '0.15em', color: isLocked ? '#f59e0b' : '#10b981' }}>
-            {isLocked ? 'WAITING FOR ORGANIZER SIGNAL' : 'READY • TAP TO LAUNCH'}
+          <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', letterSpacing: '0.15em', color: effectiveLocked ? '#f59e0b' : '#10b981' }}>
+            {effectiveLocked ? 'WAITING FOR ORGANIZER SIGNAL' : 'READY • TAP TO LAUNCH'}
           </div>
         </div>
       </div>

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASTRA Organizer Control</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      min-height: 100%;
+      background: radial-gradient(circle at 20% 0%, #18265c 0%, #070b1c 40%, #010207 100%);
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      padding: 30px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 30px;
+    }
+
+    .brand {
+      font-size: clamp(38px, 6vw, 72px);
+      font-weight: 800;
+      letter-spacing: 10px;
+      background: linear-gradient(135deg, #fff 0%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      color: #8c98bb;
+      font-size: 13px;
+      letter-spacing: 4px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      border: 1px solid rgba(255, 255, 255, .10);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, .045);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      padding: 25px;
+      box-shadow: 0 20px 70px rgba(0, 0, 0, .30);
+    }
+
+    .label {
+      color: #7f8aac;
+      font-size: 11px;
+      letter-spacing: 3px;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .state {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+
+    .LOCKED {
+      color: #ffb52e;
+    }
+
+    .UNLOCKED {
+      color: #43e68b;
+    }
+
+    .PLAYING {
+      color: #49a7ff;
+    }
+
+    .STOPPED {
+      color: #ff5757;
+    }
+
+    .VERSION {
+      font-size: 30px;
+      font-weight: 800;
+      color: #38bdf8;
+    }
+
+    input {
+      width: 100%;
+      padding: 15px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, .15);
+      outline: none;
+      background: rgba(0, 0, 0, .40);
+      color: white;
+      font-size: 16px;
+    }
+
+    input:focus {
+      border-color: rgba(56, 189, 248, 0.7);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    button {
+      min-height: 56px;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: .5px;
+      cursor: pointer;
+      transition: transform .15s ease, opacity .15s ease, box-shadow .15s ease;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .start {
+      background: #ffffff;
+      color: #050505;
+      box-shadow: 0 4px 20px rgba(255, 255, 255, 0.3);
+    }
+
+    .lock {
+      background: #a96500;
+      color: #ffffff;
+      box-shadow: 0 4px 20px rgba(169, 101, 0, 0.3);
+    }
+
+    .unlock {
+      background: #157945;
+      color: #ffffff;
+      box-shadow: 0 4px 20px rgba(21, 121, 69, 0.3);
+    }
+
+    .sync {
+      background: #354a9c;
+      color: #ffffff;
+      box-shadow: 0 4px 20px rgba(53, 74, 156, 0.3);
+    }
+
+    .stop {
+      background: #9c2525;
+      color: #ffffff;
+      box-shadow: 0 4px 20px rgba(156, 37, 37, 0.3);
+    }
+
+    .reset {
+      background: #30343d;
+      color: #ffffff;
+    }
+
+    .message {
+      min-height: 25px;
+      margin-top: 18px;
+      color: #aeb8d5;
+      font-size: 14px;
+    }
+
+    .info {
+      color: #9ba7c6;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #43e68b;
+      margin-right: 8px;
+      box-shadow: 0 0 12px #43e68b;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 18px;
+      }
+      .buttons {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">ASTRA</div>
+    <div class="subtitle">HACKATHON 2026 • ORGANIZER CONTROL CENTER</div>
+  </div>
+
+  <div class="grid">
+    <!-- SESSION STATE -->
+    <div class="card">
+      <div class="label">SESSION STATE</div>
+      <div id="state" class="state LOCKED">LOCKED</div>
+    </div>
+
+    <!-- COMMAND VERSION -->
+    <div class="card">
+      <div class="label">COMMAND VERSION</div>
+      <div id="version" class="VERSION">0</div>
+    </div>
+
+    <!-- AUTHORIZATION -->
+    <div class="card">
+      <div class="label">ORGANIZER AUTHORIZATION</div>
+      <input
+        id="token"
+        type="password"
+        autocomplete="off"
+        value="ASTRA-2026-ORGANIZER-PRIVATE-KEY-938472"
+        placeholder="Enter private organizer key"
+      >
+      <div id="authMessage" class="message"></div>
+    </div>
+
+    <!-- MASTER CONTROL -->
+    <div class="card">
+      <div class="label">MASTER CONTROL</div>
+      <div class="buttons">
+        <button class="start" onclick="sendCommand('start')">START FULLSCREEN</button>
+        <button class="unlock" onclick="sendCommand('unlock')">UNLOCK ALL</button>
+        <button class="lock" onclick="sendCommand('lock')">LOCK ALL</button>
+        <button class="sync" onclick="sendCommand('sync')">SYNC ALL</button>
+        <button class="stop" onclick="sendCommand('stop')">STOP ALL</button>
+        <button class="reset" onclick="resetSystem()">RESET SYSTEM</button>
+      </div>
+      <div id="message" class="message">Controller ready.</div>
+    </div>
+
+    <!-- INFORMATION -->
+    <div class="card">
+      <div class="label">SESSION INFORMATION</div>
+      <div class="info">
+        <div><span class="status-dot"></span>Controller online</div>
+        <br>
+        Session: <strong>ASTRA-2026</strong>
+        <br><br>
+        Participant pages poll the central session state.
+        <br><br>
+        START FULLSCREEN triggers all participant screens immediately.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const stateElement = document.getElementById('state');
+  const versionElement = document.getElementById('version');
+  const tokenElement = document.getElementById('token');
+  const messageElement = document.getElementById('message');
+  const authMessageElement = document.getElementById('authMessage');
+
+  function getToken() {
+    return (tokenElement.value || '').trim();
+  }
+
+  function showMessage(message) {
+    messageElement.textContent = message;
+  }
+
+  function updateState(data) {
+    if (!data || !data.state) return;
+    stateElement.textContent = data.state;
+    stateElement.className = 'state ' + data.state;
+    versionElement.textContent = data.version || 0;
+  }
+
+  function sendCommand(command) {
+    const token = getToken();
+    if (!token) {
+      authMessageElement.textContent = 'Enter the organizer private key.';
+      return;
+    }
+    authMessageElement.textContent = '';
+    showMessage('Sending ' + command.toUpperCase() + '...');
+
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result && result.success) {
+            updateState(result);
+            showMessage(command.toUpperCase() + ' command sent successfully.');
+          } else {
+            showMessage('Command failed.');
+          }
+        })
+        .withFailureHandler(function(error) {
+          showMessage(error && error.message ? error.message : 'Command failed.');
+        })
+        .runAdminCommand(command, token);
+    } else {
+      // Fallback via direct fetch
+      fetch('?api=' + command + '&token=' + encodeURIComponent(token))
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.success) {
+            updateState(data);
+            showMessage(command.toUpperCase() + ' command sent successfully.');
+          } else {
+            showMessage('Command failed.');
+          }
+        })
+        .catch(err => showMessage('Error: ' + err.message));
+    }
+  }
+
+  function resetSystem() {
+    const token = getToken();
+    if (!token) {
+      authMessageElement.textContent = 'Enter the organizer private key.';
+      return;
+    }
+    authMessageElement.textContent = '';
+    showMessage('Resetting ASTRA controller...');
+
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          updateState(result);
+          showMessage('ASTRA controller reset.');
+        })
+        .withFailureHandler(function(error) {
+          showMessage(error && error.message ? error.message : 'Reset failed.');
+        })
+        .adminReset(token);
+    }
+  }
+
+  function refreshState() {
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          updateState(result);
+        })
+        .withFailureHandler(function(error) {
+          console.log('State refresh failed:', error);
+        })
+        .getAdminState();
+    } else {
+      fetch('?api=state')
+        .then(r => r.json())
+        .then(updateState)
+        .catch(() => {});
+    }
+  }
+
+  refreshState();
+  setInterval(refreshState, 1000);
+</script>
+
+</body>
+</html>
