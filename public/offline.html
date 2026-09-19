@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ASTRA — Cinematic Offline Experience</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: #030712;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #videoContainer {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #000;
+      opacity: 0;
+      transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+      z-index: 10;
+    }
+    #videoContainer.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+    }
+    #startScreen {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 45%, #08152e 0%, #030712 80%);
+      z-index: 50;
+      transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #startScreen.hidden {
+      opacity: 0;
+      transform: scale(1.04);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1rem;
+      border-radius: 9999px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(34, 211, 238, 0.25);
+      color: #38bdf8;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      cursor: pointer;
+    }
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22d3ee;
+      box-shadow: 0 0 8px #22d3ee;
+    }
+    .title {
+      font-size: clamp(3.2rem, 8vw, 5.5rem);
+      font-weight: 900;
+      letter-spacing: 0.28em;
+      text-indent: 0.28em;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 40%, #38bdf8 80%, #06b6d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 35px rgba(6, 182, 212, 0.45));
+      margin-bottom: 0.75rem;
+      cursor: pointer;
+    }
+    .subtitle {
+      font-size: clamp(0.85rem, 2vw, 1.05rem);
+      letter-spacing: 0.25em;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-bottom: 3.5rem;
+    }
+    .btn-start {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(14, 165, 233, 0.15) 100%);
+      border: 1px solid rgba(34, 211, 238, 0.5);
+      color: #ffffff;
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      padding: 1.1rem 3.5rem;
+      border-radius: 9999px;
+      cursor: pointer;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 0 30px rgba(6, 182, 212, 0.25);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      outline: none;
+    }
+    .btn-start:hover:not(:disabled) {
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.45) 0%, rgba(14, 165, 233, 0.3) 100%);
+      border-color: #38bdf8;
+      box-shadow: 0 0 45px rgba(34, 211, 238, 0.5);
+    }
+    .btn-start:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+    .btn-start:disabled {
+      background: rgba(30, 41, 59, 0.6);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      cursor: not-allowed;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+    }
+    .status-hint {
+      margin-top: 1.25rem;
+      font-size: 0.78rem;
+      letter-spacing: 0.15em;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+    .status-hint.ready { color: #10b981; }
+    .status-hint.locked { color: #f59e0b; }
+    
+    /* Subtle Tap to Unmute helper if browser blocked autoplay sound */
+    #unmuteNotice {
+      display: none;
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(34, 211, 238, 0.4);
+      color: #38bdf8;
+      padding: 0.6rem 1.4rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      z-index: 40;
+      backdrop-filter: blur(10px);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="startScreen">
+    <div class="badge" id="adminBadge" title="Click 5 times for Organizer Offline Override">
+      <span class="badge-dot"></span>
+      <span>ASTRA HACKATHON 2026</span>
+    </div>
+    
+    <h1 class="title" id="brandTitle" title="Click 5 times for Organizer Offline Override">ASTRA</h1>
+    <p class="subtitle">Cinematic Offline Experience</p>
+
+    <button id="startBtn" class="btn-start" onclick="startCinematic()">
+      START FULLSCREEN
+    </button>
+    <div id="statusHint" class="status-hint ready">READY • TAP TO LAUNCH</div>
+  </div>
+
+  <div id="videoContainer" onclick="unmuteAllAudio()">
+    <!-- VIDEO PLAYS WITH SOUND (UNMUTED) -->
+    <video id="heroVideo" loop playsinline webkit-playsinline="true" preload="auto">
+      <source src="assets/video/astra-hero.mp4" type="video/mp4">
+      <source src="hackthon-video.mp4" type="video/mp4">
+      <source src="hackthon video.mp4" type="video/mp4">
+    </video>
+
+    <!-- Synchronized Audio Track from hackthon video.mp4 -->
+    <audio id="bgSong" loop preload="auto">
+      <source src="hackthon-video-audio.mp3" type="audio/mpeg">
+      <source src="assets/audio/hackthon-video-audio.mp3" type="audio/mpeg">
+    </audio>
+
+    <div id="unmuteNotice" onclick="unmuteAllAudio()">
+      🔊 TAP ANYWHERE TO UNMUTE SOUND
+    </div>
+  </div>
+
+  <script>
+    let GOOGLE_SCRIPT_URL = "";
+    const urlParams = new URLSearchParams(window.location.search);
+    let isLocked = urlParams.get('lock') === 'true';
+    if (urlParams.get('unlock') === 'true') isLocked = false;
+    if (urlParams.get('script')) GOOGLE_SCRIPT_URL = urlParams.get('script');
+
+    const video = document.getElementById('heroVideo');
+    const audio = document.getElementById('bgSong');
+    const startScreen = document.getElementById('startScreen');
+    const videoContainer = document.getElementById('videoContainer');
+    const startBtn = document.getElementById('startBtn');
+    const statusHint = document.getElementById('statusHint');
+    const unmuteNotice = document.getElementById('unmuteNotice');
+
+    function updateLockUI() {
+      if (isLocked) {
+        startBtn.disabled = true;
+        startBtn.innerHTML = "🔒 LOCKED — WAITING FOR ORGANIZER";
+        statusHint.className = "status-hint locked";
+        statusHint.textContent = "PLEASE WAIT • ORGANIZER WILL UNLOCK MOMENTARILY";
+      } else {
+        startBtn.disabled = false;
+        startBtn.innerHTML = "🚀 START FULLSCREEN";
+        statusHint.className = "status-hint ready";
+        statusHint.textContent = "READY • TAP TO LAUNCH CINEMATIC EXPERIENCE";
+      }
+    }
+    updateLockUI();
+
+    if (GOOGLE_SCRIPT_URL) {
+      function checkGoogleScriptStatus() {
+        if (!navigator.onLine) return;
+        fetch(GOOGLE_SCRIPT_URL + (GOOGLE_SCRIPT_URL.includes('?') ? '&' : '?') + 't=' + Date.now())
+          .then(res => res.json())
+          .then(data => {
+            if (data && typeof data.unlocked === 'boolean') {
+              isLocked = !data.unlocked;
+              updateLockUI();
+            }
+          })
+          .catch(() => {});
+      }
+      setInterval(checkGoogleScriptStatus, 3000);
+      checkGoogleScriptStatus();
+    }
+
+    // Secret Organizer Override
+    let clickCount = 0;
+    let clickTimer = null;
+    function registerAdminClick() {
+      clickCount++;
+      if (clickTimer) clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => { clickCount = 0; }, 2000);
+      if (clickCount >= 5) {
+        clickCount = 0;
+        const code = prompt("Organizer Override: Enter passcode to toggle lock (Default: 2026):");
+        if (code === "2026" || code === "admin") {
+          isLocked = !isLocked;
+          updateLockUI();
+        }
+      }
+    }
+    document.getElementById('adminBadge').addEventListener('click', registerAdminClick);
+    document.getElementById('brandTitle').addEventListener('click', registerAdminClick);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'u' || e.key === 'U') {
+        const code = prompt("Organizer Override: Enter passcode (Default: 2026):");
+        if (code === "2026" || code === "admin") {
+          isLocked = !isLocked;
+          updateLockUI();
+        }
+      }
+      if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+      if (e.key === 'm' || e.key === 'M') {
+        video.muted = !video.muted;
+        audio.muted = !audio.muted;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        video.currentTime = 0;
+        audio.currentTime = 0;
+        video.play().catch(() => {});
+        audio.play().catch(() => {});
+      }
+    });
+
+    function unmuteAllAudio() {
+      video.muted = false;
+      video.volume = 1.0;
+      audio.muted = false;
+      audio.volume = 1.0;
+      video.play().catch(() => {});
+      audio.play().catch(() => {});
+      unmuteNotice.style.display = 'none';
+    }
+
+    // =========================================================================
+    // START EXPERIENCE: PLAYS HACKTHON VIDEO WITH FULL SOUND
+    // =========================================================================
+    function startCinematic() {
+      if (isLocked) {
+        alert("Event has not started yet. Please wait for the organizer!");
+        return;
+      }
+
+      triggerFullscreen();
+
+      // 1. Force unmuted audio at 100% volume
+      video.muted = false;
+      video.volume = 1.0;
+      video.currentTime = 0;
+
+      // 2. Play video
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          console.log('[Audio] Video playing with sound successfully!');
+        }).catch((err) => {
+          console.warn('[Audio] Autoplay with sound restricted by browser, engaging fallback:', err);
+          // Fallback: try separate audio stream
+          audio.muted = false;
+          audio.volume = 1.0;
+          audio.currentTime = 0;
+          audio.play().catch(() => {});
+          
+          video.muted = true;
+          video.play().catch(() => {});
+          unmuteNotice.style.display = 'block';
+        });
+      }
+
+      startScreen.classList.add('hidden');
+      videoContainer.classList.add('active');
+    }
+
+    // Continuous Loop with Sound
+    video.addEventListener('ended', () => {
+      video.currentTime = 0;
+      video.play().catch(() => {});
+    });
+
+    audio.addEventListener('ended', () => {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    });
+
+    function triggerFullscreen() {
+      const docEl = document.documentElement;
+      try {
+        if (docEl.requestFullscreen) docEl.requestFullscreen().catch(() => {});
+        else if (docEl.webkitRequestFullscreen) docEl.webkitRequestFullscreen();
+        else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+      } catch (e) {}
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        triggerFullscreen();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      }
+    }
+  </script>
+</body>
+</html>
